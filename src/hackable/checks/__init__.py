@@ -1,6 +1,8 @@
-"""Security checks. Each exposes run(base, http) -> list[Finding]."""
+"""Security checks. Each exposes run(base, http) -> list[Finding].
+Injection checks (sqli, xss, open_redirect) also accept an optional third
+argument: discovered (url, [params]) pairs from the crawler."""
 
-from . import cors, debug, disclosure, exposed_files, headers, methods, open_redirect, rate_limit, robots, sqli, tls, xss
+from . import cookies, cors, debug, disclosure, exposed_files, headers, methods, open_redirect, rate_limit, robots, sqli, tls, xss
 
 CHECKS = [
     ("headers", "security headers", headers.run),
@@ -10,6 +12,7 @@ CHECKS = [
     ("debug", "debug mode / stack traces", debug.run),
     ("cors", "CORS misconfiguration", cors.run),
     ("methods", "dangerous HTTP methods", methods.run),
+    ("cookies", "cookie security flags", cookies.run),
     ("sqli", "SQL injection", sqli.run),
     ("xss", "cross-site scripting", xss.run),
     ("open_redirect", "open redirects", open_redirect.run),

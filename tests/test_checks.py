@@ -213,3 +213,21 @@ def test_crawler_discovers_links_and_forms():
     assert "q" in params
 
 
+def test_cookies_missing_flags():
+    from hackable.checks import cookies
+
+    class RawHeaders:
+        def getlist(self, k):
+            return ["session=abc; Path=/", "pref=1; Path=/; Secure"] if k == "set-cookie" else []
+
+    class Raw:
+        headers = RawHeaders()
+
+    resp = FakeResp(200, "", {})
+    resp.raw = Raw()
+    fs = cookies.run("https://example.test", FakeHttp(lambda m, u, k: resp))
+    titles = " ".join(f.title for f in fs)
+    assert "Secure" in titles and "HttpOnly" in titles and "SameSite" in titles
+    assert all("session" in f.title for f in fs if "Secure" in f.title)
+
+
