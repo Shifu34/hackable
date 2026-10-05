@@ -21,14 +21,19 @@ def normalize_target(target, http):
     return target
 
 
-def scan(target, http=None, on_check=None):
-    """Run checks. Returns (base_url, findings, elapsed_s, requests_made)."""
+def scan(target, http=None, on_check=None, include=None, exclude=None):
+    """Run checks. Returns (base_url, findings, elapsed_s, requests_made).
+
+    include/exclude are optional sets of check ids (--only / --skip).
+    """
     http = http or PoliteClient()
     base = normalize_target(target, http)
     findings = []
     started = time.time()
 
-    wanted = CHECKS
+    wanted = [c for c in CHECKS
+              if (include is None or c[0] in include)
+              and (exclude is None or c[0] not in exclude)]
 
     discovered = []
     if any(cid in INJECTION_CHECKS for cid, _l, _f in wanted):

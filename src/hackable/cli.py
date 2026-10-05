@@ -6,6 +6,7 @@ import sys
 from . import __version__
 from .findings import score_findings
 from .polite import PoliteClient
+from .checks import CHECKS
 from .report import render_html, render_json, render_sarif, render_terminal
 from .scanner import scan
 
@@ -32,6 +33,11 @@ def build_parser():
                    help="write SARIF 2.1.0 output to FILE (GitHub code scanning)")
     p.add_argument("--html", metavar="FILE",
                    help="also write a self-contained HTML report to FILE")
+    p.add_argument("--only", metavar="CHECKS",
+                   help="run only these checks, comma-separated "
+                   "(e.g. sqli,xss). choices: " + ",".join(c[0] for c in CHECKS))
+    p.add_argument("--skip", metavar="CHECKS",
+                   help="skip these checks, comma-separated")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
     p.add_argument("--fail-under", type=int, metavar="SCORE",
                    help="exit 1 if the score is below SCORE (for CI)")
@@ -64,11 +70,23 @@ def main(argv=None):
     http = PoliteClient(delay=args.delay, timeout=args.timeout,
                         max_requests=args.max_requests)
 
+    def split(s):
+        return {c.strip() for c in s.split(",") if c.strip()} if s else None
+
+    include, exclude = split(args.only), split(args.skip)
+    known = {c[0] for c in CHECKS}
+    for cid in (include or set()) | (exclude or set()):
+        if cid not in known:
+            print("Unknown check: %s (choices: %s)" % (cid, ",".join(sorted(known))),
+                  file=sys.stderr)
+            return 2
+
     def on_check(label):
         if not args.json:
             print("  checking %-28s" % label, flush=True)
 
-    base, findings, elapsed, req_count = scan(args.target, http, on_check=on_check)
+    base, findings, elapsed, req_count = scan(
+        args.target, http, on_check=on_check, include=include, exclude=exclude)
 
     use_color = (
         args.color == "always"

@@ -281,3 +281,16 @@ def test_sarif_output_shape():
     assert res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "http://example.test/search"
 
 
+def test_scanner_only_and_skip():
+    from hackable.scanner import scan
+
+    def handler(m, u, k):
+        return FakeResp(200, "<html>ok</html>", {})
+
+    http = FakeHttp(handler)
+    _base, findings, _e, _c = scan("example.test", http, include={"headers"})
+    assert findings and all(f.check == "headers" for f in findings)
+
+    http2 = FakeHttp(handler)
+    _base, findings2, _e, _c = scan("example.test", http2, exclude={"headers"})
+    assert all(f.check != "headers" for f in findings2)
