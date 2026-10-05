@@ -6,7 +6,7 @@ import sys
 from . import __version__
 from .findings import score_findings
 from .polite import PoliteClient
-from .report import render_html, render_json, render_terminal
+from .report import render_html, render_json, render_sarif, render_terminal
 from .scanner import scan
 
 CONSENT = """\
@@ -28,6 +28,8 @@ def build_parser():
     p.add_argument("--yes", "-y", action="store_true",
                    help="skip the permission confirmation")
     p.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    p.add_argument("--sarif", metavar="FILE",
+                   help="write SARIF 2.1.0 output to FILE (GitHub code scanning)")
     p.add_argument("--html", metavar="FILE",
                    help="also write a self-contained HTML report to FILE")
     p.add_argument("--color", choices=["auto", "always", "never"], default="auto")
@@ -76,6 +78,11 @@ def main(argv=None):
         print(render_json(findings, base, elapsed, req_count))
     else:
         print(render_terminal(findings, base, elapsed, req_count, use_color=use_color))
+
+    if args.sarif:
+        with open(args.sarif, "w") as fh:
+            fh.write(render_sarif(findings, base, elapsed, req_count))
+        print("SARIF report written to %s" % args.sarif)
 
     if args.html:
         with open(args.html, "w") as fh:

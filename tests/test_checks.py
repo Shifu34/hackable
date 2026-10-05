@@ -265,3 +265,19 @@ def test_sqli_boolean_no_false_positive_on_stable():
     assert fs == []
 
 
+def test_sarif_output_shape():
+    import json
+    from hackable.report import render_sarif
+
+    fs = [Finding(check="sqli", severity="critical", title="SQLi",
+                  meaning="m", fix="use params", url="http://example.test/search")]
+    doc = json.loads(render_sarif(fs, BASE, 1.0, 10))
+    assert doc["version"] == "2.1.0"
+    run = doc["runs"][0]
+    assert run["tool"]["driver"]["name"] == "hackable"
+    assert run["tool"]["driver"]["rules"][0]["id"] == "hackable/sqli"
+    res = run["results"][0]
+    assert res["level"] == "error"
+    assert res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "http://example.test/search"
+
+
