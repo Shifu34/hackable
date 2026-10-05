@@ -231,3 +231,18 @@ def test_cookies_missing_flags():
     assert all("session" in f.title for f in fs if "Secure" in f.title)
 
 
+def test_securitytxt_missing_and_present():
+    from hackable.checks import securitytxt
+
+    http = FakeHttp(lambda m, u, k: FakeResp(404, "nope"))
+    fs = securitytxt.run(BASE, http)
+    assert len(fs) == 1 and fs[0].severity == "info"
+
+    def handler(m, u, k):
+        if "security.txt" in u:
+            return FakeResp(200, "Contact: mailto:sec@example.test")
+        return FakeResp(404, "nope")
+
+    assert securitytxt.run(BASE, FakeHttp(handler)) == []
+
+
