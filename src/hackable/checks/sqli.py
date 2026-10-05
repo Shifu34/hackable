@@ -1,6 +1,10 @@
-"""SQL injection probes (safe: benign payloads, GET only, error-based).
+"""SQL injection probes (safe: benign payloads, GET only).
 
-We look for database error messages and for 500s triggered by a quote.
+Two techniques, both harmless:
+- error-based: a single quote that makes the database complain out loud
+- boolean differential: AND 1=1 vs AND 1=2 must not change the page; when it
+  does, input is very likely reaching the query unsanitized (blind SQLi)
+
 We never send destructive payloads, stacked queries, or time-based probes.
 """
 
@@ -101,5 +105,48 @@ def _error_based(base, http, pairs):
     return []
 
 
+def _boolean_based(base, http, pairs):
+    """Differential check: the page must not change between AND 1=1 / 1=2.
+
+    Conservative: the two baselines must agree first, the true-condition must
+    match the baseline closely, and the false-condition must differ clearly.
+    """
+    for url, param in pairs[:3]:
+        b1 = http.get(url, params={param: "1"})
+        b2 = http.get(url, params={param: "1"})
+        if b1 is None or b2 is None or len(b1.text) != len(b2.text):
+            continue
+        n = len(b1.text)
+        if n == 0:
+            continue
+        true = http.get(url, params={param: "1 AND 1=1"})
+        false = http.get(url, params={param: "1 AND 1=2"})
+        if true is None or false is None:
+            continue
+        true_diff = abs(len(true.text) - n)
+        false_diff = abs(len(false.text) - n)
+        if true_diff < 0.05 * n and false_diff > max(100, 0.3 * n):
+            return [Finding(
+                check="sqli",
+                severity="high",
+                title="Likely blind SQL injection in %s" % url.replace(base, "") or "/",
+                meaning="The page looks identical for a true database condition "
+                "but changes clearly for a false one. No error is shown, yet "
+                "the '%s' value is very likely reaching your SQL query, which "
+                "lets an attacker extract data bit by bit." % param,
+                fix="Use parameterized queries / prepared statements for the "
+                "'%s' parameter, and validate that it is the expected type." % param,
+                evidence="page length %d -> %d on AND 1=2" % (n, len(false.text)),
+                url=url + "?%s=1 AND 1=2" % param,
+            )]
+    return []
+
+
 def run(base, http, targets=None):
-    return _error_based(base, http, _pairs(base, targets))
+    pairs = _pairs(base, targets)
+    findings = _error_based(base, http, pairs)
+    if findings:
+        return findings  # one confirmed SQLi is enough
+    # boolean differential only on real discovered inputs, to limit requests
+    discovered = [(u, p) for (u, p) in pairs if targets and u in [t[0] for t in targets]]
+    return _boolean_based(base, http, discovered or pairs[:3])

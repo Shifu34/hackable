@@ -246,3 +246,22 @@ def test_securitytxt_missing_and_present():
     assert securitytxt.run(BASE, FakeHttp(handler)) == []
 
 
+def test_sqli_boolean_differential():
+    def handler(m, u, k):
+        val = (k.get("params") or {}).get("q", "")
+        if val == "1 AND 1=2":
+            return FakeResp(200, "x" * 50)  # clearly different page
+        return FakeResp(200, "y" * 500)
+
+    fs = sqli.run(BASE, FakeHttp(handler), targets=[(BASE + "/search", ["q"])])
+    assert any(f.severity == "high" and "blind" in f.title for f in fs)
+
+
+def test_sqli_boolean_no_false_positive_on_stable():
+    def handler(m, u, k):
+        return FakeResp(200, "same page " * 40)
+
+    fs = sqli.run(BASE, FakeHttp(handler), targets=[(BASE + "/search", ["q"])])
+    assert fs == []
+
+
