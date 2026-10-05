@@ -9,9 +9,6 @@ import string
 
 from ..findings import Finding
 
-PATHS = None  # replaced by CANDIDATES below
-PARAMS = None
-
 CANDIDATES = [
     ("/search", "q"),
     ("/hello", "name"),
@@ -22,18 +19,34 @@ CANDIDATES = [
 ]
 
 
-def run(base, http):
+def _pairs(base, targets):
+    pairs, seen = [], set()
+    for url, params in (targets or [])[:8]:
+        for param in params[:3]:
+            key = (url, param)
+            if key not in seen:
+                seen.add(key)
+                pairs.append(key)
+    for path, param in CANDIDATES:
+        key = (base + path, param)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    return pairs[:14]
+
+
+def run(base, http, targets=None):
     findings = []
     token = "hkx" + "".join(
         secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6)
     )
     payload = "<%s>" % token
-    for path, param in CANDIDATES:
-        url = base + path
+    for url, param in _pairs(base, targets):
         r = http.get(url, params={param: payload})
         if r is None:
             continue
         body = r.text
+        path = url.replace(base, "") or "/"
         if payload in body:
             findings.append(
                 Finding(

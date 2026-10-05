@@ -3,7 +3,11 @@
 import time
 
 from .checks import CHECKS
+from .crawler import discover
 from .polite import PoliteClient
+
+# checks that probe the crawler's discovered inputs
+INJECTION_CHECKS = ("sqli", "xss", "open_redirect")
 
 
 def normalize_target(target, http):
@@ -18,16 +22,31 @@ def normalize_target(target, http):
 
 
 def scan(target, http=None, on_check=None):
-    """Run all checks. Returns (base_url, findings, elapsed_s, requests_made)."""
+    """Run checks. Returns (base_url, findings, elapsed_s, requests_made)."""
     http = http or PoliteClient()
     base = normalize_target(target, http)
     findings = []
     started = time.time()
-    for _cid, label, fn in CHECKS:
+
+    wanted = CHECKS
+
+    discovered = []
+    if any(cid in INJECTION_CHECKS for cid, _l, _f in wanted):
+        if on_check:
+            on_check("mapping the app")
+        try:
+            discovered = discover(base, http)
+        except Exception:
+            discovered = []
+
+    for cid, label, fn in wanted:
         if on_check:
             on_check(label)
         try:
-            findings.extend(fn(base, http) or [])
+            if cid in INJECTION_CHECKS:
+                findings.extend(fn(base, http, discovered) or [])
+            else:
+                findings.extend(fn(base, http) or [])
         except RuntimeError:
             break  # request budget exceeded: stop gracefully
         except Exception:

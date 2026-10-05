@@ -185,3 +185,31 @@ def test_disclosure():
 def test_render_terminal_has_score():
     out = render_terminal([], BASE, 1.2, 5, use_color=False)
     assert "SCORE" in out and "100/100" in out and "GRADE  A" in out
+
+
+def test_crawler_discovers_links_and_forms():
+    from hackable.crawler import discover
+
+    pages = {
+        "http://example.test/": (
+            '<a href="/search?q=lamp">x</a>'
+            '<a href="https://other.com/?q=1">ext</a>'
+            '<form action="/search" method="get"><input name="q"></form>'
+        ),
+        "http://example.test/search": "<p>results</p>",
+    }
+
+    def handler(m, u, k):
+        base = u.split("?")[0]
+        if base in pages:
+            return FakeResp(200, pages[base], {"content-type": "text/html"})
+        return FakeResp(404, "nope", {"content-type": "text/html"})
+
+    found = discover("http://example.test", FakeHttp(handler))
+    urls = {u for u, _ in found}
+    assert "http://example.test/search" in urls
+    assert not any("other.com" in u for u in urls)
+    params = {p for _, ps in found for p in ps}
+    assert "q" in params
+
+

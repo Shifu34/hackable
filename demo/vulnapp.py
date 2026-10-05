@@ -19,6 +19,12 @@ FAKE_ENV = (
 def index():
     resp = make_response(
         "<h1>Acme Shop</h1><p>Hand-built with AI in a weekend. Totally secure. Probably.</p>"
+        '<p><a href="/search?q=lamp">Search lamps</a> | '
+        '<a href="/hello?name=World">Say hello</a> | '
+        '<a href="/goto?next=https://example.com">Partner site</a></p>'
+        '<form action="/search" method="get">'
+        '<input name="q" placeholder="Search the shop">'
+        '<button type="submit">Go</button></form>'
     )
     resp.headers["Server"] = "Werkzeug/2.3.7"
     resp.headers["X-Powered-By"] = "Flask/2.3.3"

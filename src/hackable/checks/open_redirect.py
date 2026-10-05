@@ -3,8 +3,6 @@
 from ..findings import Finding
 
 EVIL = "https://evil-hackable-test.example.com/"
-PATHS = None  # replaced by CANDIDATES below
-PARAMS = None
 
 CANDIDATES = [
     ("/goto", "next"),
@@ -18,9 +16,25 @@ CANDIDATES = [
 ]
 
 
-def run(base, http):
+def _pairs(base, targets):
+    pairs, seen = [], set()
+    for url, params in (targets or [])[:8]:
+        for param in params[:3]:
+            key = (url, param)
+            if key not in seen:
+                seen.add(key)
+                pairs.append(key)
     for path, param in CANDIDATES:
-        url = base + path
+        key = (base + path, param)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    return pairs[:14]
+
+
+def run(base, http, targets=None):
+    for url, param in _pairs(base, targets):
+        path = url.replace(base, "") or "/"
         r = http.get(url, params={param: EVIL}, allow_redirects=False)
         if r is None:
             continue
