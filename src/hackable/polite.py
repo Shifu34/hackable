@@ -11,7 +11,7 @@ import time
 import requests
 
 USER_AGENT = (
-    "hackable/0.1.0 (+https://github.com/Shifu34/hackable; "
+    "hackable/1.0.0 (+https://github.com/Shifu34/hackable; "
     "automated security self-check; scans only with owner permission)"
 )
 

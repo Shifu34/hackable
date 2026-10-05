@@ -17,9 +17,13 @@ hackable is the Let's Encrypt of pentesting: free, one command, plain English.
 
 ## What it checks
 
+14 checks. Before probing, hackable crawls your app like a visitor would,
+collecting real links and forms, so injection tests hit your actual inputs
+instead of guessed parameter names.
+
 | Check | What it finds |
 |---|---|
-| SQL injection | Database error messages and crashes from a single quote (safe, GET-only probes) |
+| SQL injection | Error-based probes plus boolean differential checks (safe, GET-only) |
 | Exposed files | Public `/.env`, `/.git/`, config backups, with content verification (no false alarms from SPA fallbacks) |
 | XSS | Your input reflected unescaped into the page |
 | Open redirects | Your site redirecting visitors to attacker domains |
@@ -27,21 +31,39 @@ hackable is the Let's Encrypt of pentesting: free, one command, plain English.
 | Debug mode | Stack traces leaking from error pages |
 | Login rate limiting | 10 rapid wrong passwords, checking for pushback |
 | Security headers | HSTS, CSP, X-Frame-Options, and friends |
+| Cookie flags | Session cookies missing Secure, HttpOnly, or SameSite |
 | TLS | Missing HTTPS, expired certs, ancient TLS versions |
 | Version disclosure | Server headers announcing exact versions |
 | HTTP methods | Risky methods like TRACE |
 | robots.txt | Hidden paths handed to attackers on a plate |
+| security.txt | No standard contact for researchers to report issues |
 
 Every finding comes with **what this means** (one sentence, no jargon) and **how to fix it** (one sentence, actionable). You get a 0-100 score and an A-F grade.
 
 ## Output
 
-Terminal report, machine-readable JSON (`--json`), and a self-contained shareable HTML report card (`--html report.html`).
+Terminal report, machine-readable JSON (`--json`), SARIF 2.1.0 for GitHub code
+scanning (`--sarif`), and a self-contained shareable HTML report card
+(`--html report.html`).
 
 ```bash
 hackable https://myapp.com --html report.html
 hackable https://myapp.com --fail-under 70   # exit 1 in CI if score < 70
+hackable https://myapp.com --only sqli,xss   # run a subset of checks
 ```
+
+## GitHub Action
+
+Drop it into your workflow and every push gets scanned:
+
+```yaml
+- uses: Shifu34/hackable@v1
+  with:
+    target: https://myapp.com
+    fail-under: 70
+```
+
+Results upload to the Security tab automatically.
 
 ## Safety
 
@@ -51,10 +73,9 @@ hackable only sends harmless probes: no destructive payloads, no data deletion, 
 
 ## Roadmap
 
-- Boolean-based SQLi differential checks
 - Authenticated scans (test behind a login)
 - JavaScript-rendered app support
-- GitHub Action
+- Scheduled scans with diff alerts
 
 ## License
 

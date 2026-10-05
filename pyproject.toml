@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hackable"
-version = "0.1.0"
+version = "1.0.0"
 description = "Hack yourself before they do. One-command website security check for people who have never run a security tool."
 readme = "README.md"
 requires-python = ">=3.9"
