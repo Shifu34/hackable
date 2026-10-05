@@ -9,6 +9,8 @@ $ pip install hackable
 $ hackable https://myapp.com
 ```
 
+![hackable scanning a deliberately vulnerable demo app](demo/demo.gif)
+
 ## The problem
 
 Millions of apps are being built with AI right now by people who have never heard of OWASP. The apps work. They also leak database keys, take SQL injection, and let anyone log in as anyone. The existing scanners (ZAP, Nuclei, Burp) are expert tools with expert UX. They might as well be in another language.
