@@ -48,7 +48,7 @@ def _c(text, code, use_color):
     return "%s%s%s" % (code, text, RESET) if use_color else text
 
 
-def render_terminal(findings, base, elapsed, req_count, use_color=True):
+def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=None):
     score, grade = score_findings(findings)
     L = []
     c = lambda t, code: _c(t, code, use_color)  # noqa: E731
@@ -88,35 +88,45 @@ def render_terminal(findings, base, elapsed, req_count, use_color=True):
     )
     L.append(VERDICTS[grade])
     L.append("")
+    if diff is not None:
+        from .baseline import render_diff_text
+        L.append(render_diff_text(diff))
     return "\n".join(L)
 
 
-def render_json(findings, base, elapsed, req_count):
+def render_json(findings, base, elapsed, req_count, diff=None):
     score, grade = score_findings(findings)
-    return json.dumps(
-        {
-            "tool": "hackable " + __version__,
-            "target": base,
-            "scanned_at": datetime.now(timezone.utc).isoformat(),
-            "requests": req_count,
-            "elapsed_s": round(elapsed, 1),
-            "score": score,
-            "grade": grade,
-            "findings": [
-                {
-                    "check": f.check,
-                    "severity": f.severity,
-                    "title": f.title,
-                    "meaning": f.meaning,
-                    "fix": f.fix,
-                    "evidence": f.evidence,
-                    "url": f.url,
-                }
-                for f in findings
-            ],
-        },
-        indent=2,
-    )
+    payload = {
+        "tool": "hackable " + __version__,
+        "target": base,
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+        "requests": req_count,
+        "elapsed_s": round(elapsed, 1),
+        "score": score,
+        "grade": grade,
+        "findings": [
+            {
+                "check": f.check,
+                "severity": f.severity,
+                "title": f.title,
+                "meaning": f.meaning,
+                "fix": f.fix,
+                "evidence": f.evidence,
+                "url": f.url,
+            }
+            for f in findings
+        ],
+    }
+    if diff is not None:
+        payload["diff"] = {
+            "new": diff["new"],
+            "fixed": diff["fixed"],
+            "score_before": diff.get("score_before"),
+            "grade_before": diff.get("grade_before"),
+            "score_after": diff.get("score_after"),
+            "grade_after": diff.get("grade_after"),
+        }
+    return json.dumps(payload, indent=2)
 
 
 SARIF_LEVELS = {

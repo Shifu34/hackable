@@ -34,7 +34,9 @@ A beginner hacker could break in within minutes. Fix the criticals today.
 
 Every finding ships with **what this means** (one sentence, no jargon) and **how to fix it** (one sentence, actionable). You also get a 0-100 score and an A-F grade, so you can watch the number climb as you fix things.
 
-*Example output from the intentionally vulnerable demo app in `demo/`.*
+*Example output from the intentionally vulnerable demo app in `demo/` (`vulnapp.py`).
+Its hardened twin, `vulnapp_fixed.py`, shows the same app after fixing every
+finding: scan one, fix, scan the other, and watch the score climb.*
 
 ## Why this exists
 
@@ -81,7 +83,38 @@ hackable https://your-site.com --html report.html   # shareable report card
 hackable https://your-site.com --json results.json  # machine-readable output
 hackable https://your-site.com --sarif results.sarif # GitHub code scanning
 hackable https://your-site.com --fail-under 70  # exit 1 in CI if score < 70
+hackable https://your-site.com --cookie "sessionid=abc123"  # scan behind a login
+hackable https://your-site.com --diff-from baseline.json    # show NEW/FIXED findings
 ```
+
+## Scanning behind a login
+
+Most real apps hide their interesting pages behind a login. hackable can scan
+as you, using a session cookie you hand it:
+
+```bash
+hackable https://your-site.com --cookie "sessionid=abc123; auth_token=xyz"
+```
+
+Grab the cookie from your browser's devtools (Application or Storage tab,
+then Cookies). The crawler and every probe then run as your logged-in
+session, so pages and forms behind the login get crawled and tested too.
+
+A few rules that keep this safe:
+
+- **hackable never logs in for you.** There is no username/password flag and
+  never will be. You authenticate in your own browser and lend hackable the
+  session. If the cookie looks expired, it warns you and scans the public
+  site instead.
+- **The cookie value never appears in any output.** Not in the terminal, not
+  in `--json`, `--sarif`, or `--html` reports. Reports stay clean of secrets.
+- **Keep it out of your shell history.** Prefer reading it from a file:
+  `hackable https://your-site.com --cookie "$(cat ~/.config/hackable/cookie)"`.
+  You can also set the `HACKABLE_COOKIE` environment variable instead of the
+  flag, which is handy in CI.
+- Need a bearer token or another header instead? `--header "Authorization:
+  Bearer TOKEN"` sends an extra header on every request (repeatable, also
+  never printed).
 
 ## GitHub Action
 
@@ -96,15 +129,15 @@ Scan on every push. Findings land in your repo's Security tab, no new dashboard 
 
 ## Safety
 
-hackable only sends harmless probes: no destructive payloads, no data deletion, no login attempts with real credentials. About 50-150 requests with delays and an identifying User-Agent. It asks for confirmation before scanning unless you pass `--yes`.
+hackable only sends harmless probes: no destructive payloads, no data deletion, no login attempts with real credentials. It never logs in as you: for pages behind a login you hand it your own session cookie with `--cookie`, and the value never appears in any output. About 50-150 requests with delays and an identifying User-Agent. It asks for confirmation before scanning unless you pass `--yes`.
 
 **Only scan apps you own or have explicit permission to test.** Scanning without permission may be illegal. hackable is a first line of defense, not a replacement for a professional penetration test.
 
 ## Roadmap
 
-- Authenticated scans (test behind a login)
 - JavaScript-rendered app support
-- Scheduled scans with diff alerts
+- Built-in scheduling (for now: pair cron with `--save-baseline` /
+  `--diff-from` for scheduled scans with diff alerts)
 
 ## License
 
