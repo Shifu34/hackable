@@ -1,6 +1,6 @@
 """Missing security headers."""
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 WANTED = [
     (
@@ -49,8 +49,7 @@ WANTED = [
 def run(base, http):
     findings = []
     r = http.get(base + "/")
-    if r is None:
-        return findings
+    ensure_testable(r, http, "the homepage")
     present = {k.lower() for k in r.headers}
     is_https = base.startswith("https://")
     for header, severity, title, meaning, fix in WANTED:

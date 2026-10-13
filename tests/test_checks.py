@@ -288,9 +288,130 @@ def test_scanner_only_and_skip():
         return FakeResp(200, "<html>ok</html>", {})
 
     http = FakeHttp(handler)
-    _base, findings, _e, _c = scan("example.test", http, include={"headers"})
+    _base, findings, _cr, _e, _c = scan("example.test", http, include={"headers"})
     assert findings and all(f.check == "headers" for f in findings)
 
     http2 = FakeHttp(handler)
-    _base, findings2, _e, _c = scan("example.test", http2, exclude={"headers"})
+    _base, findings2, _cr2, _e, _c = scan("example.test", http2, exclude={"headers"})
     assert all(f.check != "headers" for f in findings2)
+
+
+# --- per-check status: pass / fail / not_tested -----------------------------
+
+from hackable.findings import CheckResult, Inconclusive, ensure_testable
+from hackable.report import render_html, render_json
+
+
+class FakeRespWithUrl(FakeResp):
+    def __init__(self, status_code=200, text="", headers=None, url="http://example.test/"):
+        super().__init__(status_code, text, headers)
+        self.url = url
+
+
+class FakeAuthHttp(FakeHttp):
+    has_auth = True
+
+
+def test_ensure_testable_none_raises():
+    http = FakeHttp(lambda m, u, k: None)
+    try:
+        ensure_testable(None, http, "the homepage")
+        assert False, "should have raised"
+    except Inconclusive as e:
+        assert "could not reach" in e.reason
+
+
+def test_ensure_testable_dead_session_raises():
+    http = FakeAuthHttp(lambda m, u, k: None)
+    resp = FakeRespWithUrl(200, "<html>login</html>", {}, url="http://example.test/login")
+    try:
+        ensure_testable(resp, http, "the homepage")
+        assert False, "should have raised"
+    except Inconclusive as e:
+        assert "--cookie" in e.reason
+
+
+def test_ensure_testable_public_scan_ignores_login_look():
+    # without --cookie, a login-looking page is the expected public surface
+    http = FakeHttp(lambda m, u, k: None)
+    resp = FakeRespWithUrl(200, "<html>login</html>", {}, url="http://example.test/login")
+    ensure_testable(resp, http, "the homepage")  # must not raise
+
+
+def test_ensure_testable_healthy_response_ok():
+    http = FakeAuthHttp(lambda m, u, k: None)
+    resp = FakeRespWithUrl(200, "<html>dashboard</html>", {}, url="http://example.test/app")
+    ensure_testable(resp, http, "the homepage")  # must not raise
+
+
+def test_scan_marks_unreachable_check_not_tested():
+    from hackable.scanner import scan
+    http = FakeHttp(lambda m, u, k: None)  # every fetch fails
+    base, findings, results, _e, _c = scan("example.test", http, include={"headers"})
+    assert findings == []
+    assert len(results) == 1
+    r = results[0]
+    assert r.check == "headers" and r.status == "not_tested"
+    assert "could not reach" in r.reason
+
+
+def test_scan_check_results_pass_and_fail():
+    from hackable.scanner import scan
+    http = FakeHttp(lambda m, u, k: FakeResp(200, "<html>ok</html>", {}))
+    base, findings, results, _e, _c = scan("example.test", http, include={"headers"})
+    assert findings  # missing headers -> findings
+    r = results[0]
+    assert r.status == "fail" and r.finding_count == len(findings)
+
+
+def test_scan_all_checks_reported():
+    from hackable.scanner import scan
+    from hackable.checks import CHECKS
+    http = FakeHttp(lambda m, u, k: FakeResp(200, "<html>ok</html>", {}))
+    base, findings, results, _e, _c = scan("example.test", http)
+    assert len(results) == len(CHECKS)
+    assert {r.status for r in results} <= {"pass", "fail", "not_tested"}
+
+
+def test_terminal_shows_check_status():
+    results = [
+        CheckResult(check="headers", label="security headers", status="pass"),
+        CheckResult(check="sqli", label="SQL injection", status="fail", finding_count=2),
+        CheckResult(check="cors", label="CORS misconfiguration", status="not_tested",
+                    reason="could not reach the homepage"),
+    ]
+    out = render_terminal([], BASE, 1.2, 5, use_color=False, check_results=results)
+    assert "CHECK STATUS" in out
+    assert "security headers" in out and "passed" in out
+    assert "SQL injection" in out and "2 findings" in out
+    assert "NOT TESTED" in out.upper() or "not tested" in out
+    assert "could not reach the homepage" in out
+    assert "may be incomplete" in out
+
+
+def test_not_tested_does_not_change_score():
+    results = [CheckResult(check="x", label="x", status="not_tested", reason="r")]
+    out = render_terminal([], BASE, 1.2, 5, use_color=False, check_results=results)
+    assert "100/100" in out and "GRADE  A" in out
+
+
+def test_json_includes_checks():
+    import json
+    results = [CheckResult(check="headers", label="security headers", status="pass")]
+    doc = json.loads(render_json([], BASE, 1.2, 5, check_results=results))
+    assert doc["checks"] == [{
+        "check": "headers", "label": "security headers", "status": "pass",
+        "reason": None, "finding_count": 0,
+    }]
+
+
+def test_html_includes_check_table():
+    results = [
+        CheckResult(check="cors", label="CORS misconfiguration", status="not_tested",
+                    reason="dead session"),
+    ]
+    out = render_html([], BASE, 1.2, 5, check_results=results)
+    assert "Check status" in out
+    assert "NOT TESTED" in out
+    assert "dead session" in out
+    assert "may be incomplete" in out

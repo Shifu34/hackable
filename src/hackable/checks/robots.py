@@ -1,12 +1,13 @@
 """Interesting paths leaked via robots.txt."""
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 
 def run(base, http):
     r = http.get(base + "/robots.txt")
-    if r is None or r.status_code != 200:
-        return []
+    ensure_testable(r, http, "/robots.txt")
+    if r.status_code != 200:
+        return []  # no robots.txt is fine; the check ran
     lines = [
         line.split(":", 1)[1].strip()
         for line in r.text.splitlines()

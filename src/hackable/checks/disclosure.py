@@ -2,7 +2,7 @@
 
 import re
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 VERSION_RE = re.compile(r"\d+\.\d+")
 
@@ -11,8 +11,7 @@ INTERESTING = ("server", "x-powered-by", "x-aspnet-version", "x-generator")
 
 def run(base, http):
     r = http.get(base + "/")
-    if r is None:
-        return []
+    ensure_testable(r, http, "the homepage")
     leaked = []
     for name in INTERESTING:
         value = r.headers.get(name)

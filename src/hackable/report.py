@@ -48,7 +48,8 @@ def _c(text, code, use_color):
     return "%s%s%s" % (code, text, RESET) if use_color else text
 
 
-def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=None):
+def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=None,
+                   check_results=None):
     score, grade = score_findings(findings)
     L = []
     c = lambda t, code: _c(t, code, use_color)  # noqa: E731
@@ -60,8 +61,14 @@ def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=Non
     L.append("")
 
     grouped = {s: [f for f in findings if f.severity == s] for s in SEVERITIES}
+    n_untested = sum(1 for r in (check_results or []) if r.status == "not_tested")
     if not findings:
-        L.append(c("No issues found. Either your site is solid, or it hid well.", BOLD))
+        if n_untested:
+            L.append(c(
+                "No issues found, but %d check%s could not run (see CHECK STATUS "
+                "below)." % (n_untested, "s" if n_untested != 1 else ""), BOLD))
+        else:
+            L.append(c("No issues found. Either your site is solid, or it hid well.", BOLD))
     for sev in SEVERITIES:
         items = grouped[sev]
         if not items:
@@ -81,6 +88,31 @@ def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=Non
                 L.append(c("    Evidence: %s%s" % (ev[:140], "..." if len(ev) > 140 else ""), DIM))
         L.append("")
 
+    if check_results:
+        not_tested = [r for r in check_results if r.status == "not_tested"]
+        L.append(c("CHECK STATUS", BOLD))
+        for r in check_results:
+            if r.status == "fail":
+                mark = c("\u2716", SEV_COLOR["high"])
+                detail = "%d finding%s" % (r.finding_count,
+                                           "s" if r.finding_count != 1 else "")
+            elif r.status == "not_tested":
+                mark = c("?", "\033[33m")
+                detail = c("not tested: %s" % r.reason, DIM)
+            else:
+                mark = c("\u2713", "\033[32m")
+                detail = c("passed", DIM)
+            L.append("  %s %-28s %s" % (mark, r.label, detail))
+        L.append("")
+        if not_tested:
+            L.append(c(
+                "Note: %d check%s could not run, so this report may be "
+                "incomplete. A clean-looking result with untested checks is "
+                "not the same as a clean site." % (
+                    len(not_tested), "s" if len(not_tested) != 1 else ""),
+                "\033[33m"))
+            L.append("")
+
     L.append(c("-" * 60, DIM))
     L.append(
         "SCORE  %s   GRADE  %s"
@@ -94,7 +126,7 @@ def render_terminal(findings, base, elapsed, req_count, use_color=True, diff=Non
     return "\n".join(L)
 
 
-def render_json(findings, base, elapsed, req_count, diff=None):
+def render_json(findings, base, elapsed, req_count, diff=None, check_results=None):
     score, grade = score_findings(findings)
     payload = {
         "tool": "hackable " + __version__,
@@ -104,6 +136,16 @@ def render_json(findings, base, elapsed, req_count, diff=None):
         "elapsed_s": round(elapsed, 1),
         "score": score,
         "grade": grade,
+        "checks": [
+            {
+                "check": r.check,
+                "label": r.label,
+                "status": r.status,  # pass | fail | not_tested
+                "reason": r.reason or None,
+                "finding_count": r.finding_count,
+            }
+            for r in (check_results or [])
+        ],
         "findings": [
             {
                 "check": f.check,
@@ -179,7 +221,7 @@ def render_sarif(findings, base, elapsed, req_count):
         indent=2,
     )
 
-def render_html(findings, base, elapsed, req_count):
+def render_html(findings, base, elapsed, req_count, check_results=None):
     score, grade = score_findings(findings)
     esc = html.escape
     cards = []
@@ -210,6 +252,37 @@ def render_html(findings, base, elapsed, req_count):
         )
     if not cards:
         cards.append('<div class="card"><p><b>No issues found.</b></p></div>')
+    check_rows = []
+    if check_results:
+        for r in check_results:
+            if r.status == "fail":
+                badge = '<span class="sev" style="background:#ff8c42">FAIL</span>'
+                detail = "%d finding%s" % (r.finding_count,
+                                           "s" if r.finding_count != 1 else "")
+            elif r.status == "not_tested":
+                badge = '<span class="sev" style="background:#f1c40f">NOT TESTED</span>'
+                detail = esc(r.reason)
+            else:
+                badge = '<span class="sev" style="background:#3fb950">PASS</span>'
+                detail = ""
+            check_rows.append(
+                '<tr><td>%s</td><td>%s</td><td class="meta">%s</td></tr>'
+                % (badge, esc(r.label), detail)
+            )
+    checks_html = ""
+    if check_rows:
+        not_tested_n = sum(1 for r in check_results if r.status == "not_tested")
+        warn = ""
+        if not_tested_n:
+            warn = ('<p class="warn">%d check%s could not run, so this report '
+                    'may be incomplete. A clean-looking result with untested '
+                    'checks is not the same as a clean site.</p>'
+                    % (not_tested_n, "s" if not_tested_n != 1 else ""))
+        checks_html = (
+            "<h2>Check status</h2>" + warn +
+            '<table class="checks"><tr><th>Status</th><th>Check</th><th>Detail</th></tr>'
+            + "".join(check_rows) + "</table>"
+        )
     return """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>hackable report: {base}</title>
@@ -229,6 +302,13 @@ h1 {{ font-size: 22px; }} .dim {{ color: #8a8f98; }}
 .sev {{ color: #0d1117; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; }}
 .title {{ font-weight: 700; font-size: 16px; }}
 .meta {{ color: #8a8f98; font-size: 13px; }} code {{ font-size: 12.5px; }}
+.checks {{ width: 100%; border-collapse: collapse; margin: 14px 0; }}
+.checks th, .checks td {{ text-align: left; padding: 8px 10px;
+  border-bottom: 1px solid #30363d; font-size: 14px; }}
+.checks th {{ color: #8a8f98; font-weight: 600; }}
+.warn {{ background: #3a2f0b; border: 1px solid #f1c40f; border-radius: 8px;
+  padding: 10px 14px; font-size: 14px; }}
+h2 {{ font-size: 18px; margin-top: 28px; }}
 .footer {{ margin-top: 28px; color: #8a8f98; font-size: 13px; }}
 </style></head><body>
 <h1>hackable report</h1>
@@ -239,6 +319,7 @@ h1 {{ font-size: 22px; }} .dim {{ color: #8a8f98; }}
   <div><b>{verdict}</b></div>
 </div>
 {cards}
+{checks_html}
 <p class="footer">Generated by hackable " + __version__ + " &mdash; hack yourself before they do.
 Only scan apps you own or have permission to test.</p>
 </body></html>""".format(
@@ -251,4 +332,5 @@ Only scan apps you own or have permission to test.</p>
         gcolor="#ff5555" if grade in "DF" else "#f1c40f" if grade == "C" else "#3fb950",
         verdict=esc(VERDICTS[grade]),
         cards="\n".join(cards),
+        checks_html=checks_html,
     )

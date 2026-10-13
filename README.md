@@ -34,6 +34,8 @@ A beginner hacker could break in within minutes. Fix the criticals today.
 
 Every finding ships with **what this means** (one sentence, no jargon) and **how to fix it** (one sentence, actionable). You also get a 0-100 score and an A-F grade, so you can watch the number climb as you fix things.
 
+Every report also shows a **check status** table: each of the 14 checks is marked passed, failed, or **not tested** (with the reason). A check that could not run, for example because the page was unreachable or your `--cookie` session had expired and the site answered with a login page, is reported explicitly instead of silently looking like a clean pass. For a non-expert, "not tested" matters as much as "passed".
+
 *Example output from the intentionally vulnerable demo app in `demo/` (`vulnapp.py`).
 Its hardened twin, `vulnapp_fixed.py`, shows the same app after fixing every
 finding: scan one, fix, scan the other, and watch the score climb.*

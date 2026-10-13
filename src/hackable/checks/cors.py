@@ -1,6 +1,6 @@
 """CORS misconfiguration."""
 
-from ..findings import Finding
+from ..findings import Finding, Inconclusive, ensure_testable
 
 EVIL = "https://evil-hackable-test.example.com"
 
@@ -18,11 +18,20 @@ def _check_response(r):
 
 
 def run(base, http):
-    r = http.options(base + "/", headers={"Origin": EVIL})
-    verdict = _check_response(r) if r is not None else None
-    if verdict is None:
-        r = http.get(base + "/", headers={"Origin": EVIL})
-        verdict = _check_response(r) if r is not None else None
+    # probe both OPTIONS and GET: some servers only answer CORS on one of them
+    probed = False
+    verdict = None
+    for method in ("options", "get"):
+        r = getattr(http, method)(base + "/", headers={"Origin": EVIL})
+        if r is None:
+            continue
+        probed = True
+        ensure_testable(r, http, "the homepage")
+        verdict = _check_response(r)
+        if verdict is not None:
+            break
+    if not probed:
+        raise Inconclusive("could not reach the homepage to test CORS")
     if verdict is None:
         return []
     if verdict == "critical":

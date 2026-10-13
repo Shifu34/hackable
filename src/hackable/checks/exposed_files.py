@@ -1,6 +1,6 @@
 """Sensitive files accidentally left public."""
 
-from ..findings import Finding
+from ..findings import Finding, Inconclusive
 
 
 def _looks_like_env(text):
@@ -100,9 +100,13 @@ TARGETS = [
 
 def run(base, http):
     findings = []
+    reached = False
     for path, severity, signature, title, meaning, fix in TARGETS:
         r = http.get(base + path)
-        if r is None or r.status_code != 200:
+        if r is None:
+            continue
+        reached = True
+        if r.status_code != 200:
             continue
         try:
             if signature(r.text, r.content):
@@ -119,4 +123,6 @@ def run(base, http):
                 )
         except Exception:
             continue
+    if not reached:
+        raise Inconclusive("could not reach the site to check for exposed files")
     return findings

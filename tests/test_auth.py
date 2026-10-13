@@ -214,17 +214,17 @@ def _scan_with_secret(gated_app):
 
 
 def test_secret_not_in_json(gated_app):
-    base, findings, elapsed, count = _scan_with_secret(gated_app)
+    base, findings, _cr, elapsed, count = _scan_with_secret(gated_app)
     assert "S3CR3TCOOKIE" not in render_json(findings, base, elapsed, count)
 
 
 def test_secret_not_in_sarif(gated_app):
-    base, findings, elapsed, count = _scan_with_secret(gated_app)
+    base, findings, _cr, elapsed, count = _scan_with_secret(gated_app)
     assert "S3CR3TCOOKIE" not in render_sarif(findings, base, elapsed, count)
 
 
 def test_secret_not_in_html(gated_app):
-    base, findings, elapsed, count = _scan_with_secret(gated_app)
+    base, findings, _cr, elapsed, count = _scan_with_secret(gated_app)
     assert "S3CR3TCOOKIE" not in render_html(findings, base, elapsed, count)
 
 

@@ -1,12 +1,11 @@
 """Dangerous HTTP methods (TRACE/TRACK)."""
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 
 def run(base, http):
     r = http.options(base + "/")
-    if r is None:
-        return []
+    ensure_testable(r, http, "the homepage")
     allow = r.headers.get("allow", "")
     methods = {m.strip().upper() for m in allow.split(",") if m.strip()}
     bad = sorted(m for m in ("TRACE", "TRACK") if m in methods)

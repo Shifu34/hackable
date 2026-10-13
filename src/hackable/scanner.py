@@ -2,27 +2,14 @@
 
 import sys
 import time
-from urllib.parse import urlparse
 
 from .checks import CHECKS
 from .crawler import discover
+from .findings import CheckResult, Inconclusive, _looks_logged_out
 from .polite import PoliteClient
 
 # checks that probe the crawler's discovered inputs
 INJECTION_CHECKS = ("sqli", "xss", "open_redirect")
-
-# one cheap heuristic: a root fetch that lands on a login-ish page or gets
-# 401/403 means the session cookie is probably expired or wrong
-_LOGIN_PATH_HINTS = ("login", "signin", "sign-in", "log-in", "authenticate")
-
-
-def _looks_logged_out(resp):
-    if resp is None:
-        return False  # can't tell; stay quiet rather than cry wolf
-    if resp.status_code in (401, 403):
-        return True
-    path = urlparse(resp.url).path.lower()
-    return any(hint in path for hint in _LOGIN_PATH_HINTS)
 
 
 def check_auth_session(base, http):
@@ -57,13 +44,17 @@ def normalize_target(target, http):
 
 
 def scan(target, http=None, on_check=None, include=None, exclude=None):
-    """Run checks. Returns (base_url, findings, elapsed_s, requests_made).
+    """Run checks. Returns (base_url, findings, check_results, elapsed_s,
+    requests_made).
 
+    check_results is a list of CheckResult, one per check that was selected
+    to run, with status "pass", "fail" or "not_tested".
     include/exclude are optional sets of check ids (--only / --skip).
     """
     http = http or PoliteClient()
     base = normalize_target(target, http)
     findings = []
+    check_results = []
     started = time.time()
 
     if getattr(http, "has_auth", False):
@@ -74,6 +65,7 @@ def scan(target, http=None, on_check=None, include=None, exclude=None):
               and (exclude is None or c[0] not in exclude)]
 
     discovered = []
+    crawl_ok = True
     if any(cid in INJECTION_CHECKS for cid, _l, _f in wanted):
         if on_check:
             on_check("mapping the app")
@@ -81,18 +73,48 @@ def scan(target, http=None, on_check=None, include=None, exclude=None):
             discovered = discover(base, http)
         except Exception:
             discovered = []
+            crawl_ok = False
 
     for cid, label, fn in wanted:
         if on_check:
             on_check(label)
         try:
+            if cid in INJECTION_CHECKS and not crawl_ok and not discovered:
+                raise Inconclusive(
+                    "could not crawl the site to find forms and inputs to test"
+                )
             if cid in INJECTION_CHECKS:
-                findings.extend(fn(base, http, discovered) or [])
+                new_findings = fn(base, http, discovered) or []
             else:
-                findings.extend(fn(base, http) or [])
+                new_findings = fn(base, http) or []
+            findings.extend(new_findings)
+            status = "fail" if new_findings else "pass"
+            check_results.append(CheckResult(
+                check=cid, label=label, status=status,
+                finding_count=len(new_findings),
+            ))
+        except Inconclusive as e:
+            # the check could not meaningfully run: report it as not tested
+            # instead of letting it look like a clean pass
+            check_results.append(CheckResult(
+                check=cid, label=label, status="not_tested", reason=e.reason,
+            ))
         except RuntimeError:
-            break  # request budget exceeded: stop gracefully
-        except Exception:
-            continue  # one broken check must never kill the scan
+            # request budget exceeded: stop gracefully, mark the rest untested
+            remaining = wanted[wanted.index((cid, label, fn)) + 1:]
+            for rcid, rlabel, _rfn in remaining:
+                check_results.append(CheckResult(
+                    check=rcid, label=rlabel, status="not_tested",
+                    reason="request budget exceeded before this check ran",
+                ))
+            break
+        except Exception as e:
+            # one broken check must never kill the scan, but it must not
+            # look like a pass either
+            check_results.append(CheckResult(
+                check=cid, label=label, status="not_tested",
+                reason="check errored: %s" % e,
+            ))
+            continue
     elapsed = time.time() - started
-    return base, findings, elapsed, http.count
+    return base, findings, check_results, elapsed, http.count

@@ -1,13 +1,18 @@
 """Check for a security.txt file so researchers can report vulnerabilities."""
 
-from ..findings import Finding
+from ..findings import Finding, Inconclusive
 
 
 def run(base, http):
+    reached = False
     for path in ("/.well-known/security.txt", "/security.txt"):
         r = http.get(base + path)
+        if r is not None:
+            reached = True
         if r is not None and r.status_code == 200 and "contact" in r.text.lower():
             return []
+    if not reached:
+        raise Inconclusive("could not reach the site to look for security.txt")
     return [Finding(
         check="securitytxt", severity="info",
         title="No security.txt file",

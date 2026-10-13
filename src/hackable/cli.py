@@ -143,7 +143,7 @@ def main(argv=None):
         if not args.json:
             print("  checking %-28s" % label, flush=True)
 
-    base, findings, elapsed, req_count = scan(
+    base, findings, check_results, elapsed, req_count = scan(
         args.target, http, on_check=on_check, include=include, exclude=exclude)
 
     diff = None
@@ -160,10 +160,12 @@ def main(argv=None):
         or (args.color == "auto" and sys.stdout.isatty())
     )
     if args.json:
-        print(render_json(findings, base, elapsed, req_count, diff=diff))
+        print(render_json(findings, base, elapsed, req_count, diff=diff,
+                           check_results=check_results))
     else:
         print(render_terminal(findings, base, elapsed, req_count,
-                              use_color=use_color, diff=diff))
+                              use_color=use_color, diff=diff,
+                              check_results=check_results))
 
     if args.sarif:
         with open(args.sarif, "w") as fh:
@@ -172,7 +174,8 @@ def main(argv=None):
 
     if args.html:
         with open(args.html, "w") as fh:
-            fh.write(render_html(findings, base, elapsed, req_count))
+            fh.write(render_html(findings, base, elapsed, req_count,
+                                 check_results=check_results))
         print("HTML report written to %s" % args.html)
 
     note = sys.stderr if args.json else sys.stdout

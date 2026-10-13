@@ -2,7 +2,7 @@
 
 import secrets
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 MARKERS = [
     "traceback (most recent call last)",
@@ -21,8 +21,7 @@ MARKERS = [
 def run(base, http):
     probe = "/hackable-probe-" + secrets.token_hex(4)
     r = http.get(base + probe)
-    if r is None:
-        return []
+    ensure_testable(r, http, "the probe page")
     body = r.text.lower()
     hits = [m for m in MARKERS if m in body]
     if not hits:

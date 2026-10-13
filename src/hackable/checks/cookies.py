@@ -1,6 +1,6 @@
 """Check that cookies, especially session cookies, carry security flags."""
 
-from ..findings import Finding
+from ..findings import Finding, ensure_testable
 
 FLAG_ADVICE = {
     "secure": ("medium", "Cookie without the Secure flag",
@@ -32,8 +32,7 @@ def _raw_cookies(response):
 
 def run(base, http):
     r = http.get(base + "/")
-    if r is None:
-        return []
+    ensure_testable(r, http, "the homepage")
     raw = _raw_cookies(r)
     if not raw:
         return []
